@@ -25,6 +25,10 @@ endif #TARGET_BOARD_AUTO
 PRODUCT_PACKAGES += android.hardware.gnss-aidl-impl-qti
 PRODUCT_PACKAGES += android.hardware.gnss-aidl-service-qti
 
+# Stub HAL, to be launched when QSPA nav is disabled.
+PRODUCT_PACKAGES += android.hardware.gnss-aidl-impl-qti-stub
+PRODUCT_PACKAGES += android.hardware.gnss-aidl-service-qti-stub
+
 ## Feature flags - self contained FR in gps module
 # Enable NHz location feature. Default is false.
 # Set this flag to true to enable the NHz location feature.
