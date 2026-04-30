@@ -76,6 +76,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 using namespace std;
 #include <unordered_set>
+#include <unordered_map>
 
 namespace loc_util {
 
@@ -240,6 +241,7 @@ class Sock {
     //   no null ending char needed.
     char LOC_IPC_HEAD[42];
     const uint32_t mMaxTxSize;
+    mutable std::unordered_map<std::string, std::pair<int32_t, std::string>> mSockToPayloadMap;
     ssize_t sendto(const void *buf, size_t len, int flags, const struct sockaddr *destAddr,
                    socklen_t addrlen) const;
     ssize_t recvfrom(const LocIpcRecver& recver, const shared_ptr<ILocIpcListener>& dataCb,
