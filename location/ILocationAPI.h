@@ -186,12 +186,6 @@ public:
                 LOCATION_ERROR_ID_UNKNOWN if id does not match a gnssNiCallback */
     virtual void gnssNiResponse(uint32_t id, GnssNiResponse response) = 0;
 
-    /** @brief enableNetworkProvider enables Network Provider */
-    virtual void enableNetworkProvider() {}
-
-    /** @brief disableNetworkProvider disables Network Provider */
-    virtual void disableNetworkProvider() {}
-
     /** @brief startNetworkLocation starts tracking session for
        network location request */
     virtual void startNetworkLocation(trackingCallback*   callback,

@@ -288,6 +288,8 @@ typedef uint64_t LocationCapabilitiesMask;
 #define   LOCATION_CAPABILITIES_TIME_BASED_TRACKING_BIT           (1<<0)
 // supports startBatching API with minInterval param
 #define   LOCATION_CAPABILITIES_TIME_BASED_BATCHING_BIT           (1<<1)
+// supports startTracking API with minDistance param
+#define  LOCATION_CAPABILITIES_DISTANCE_BASED_TRACKING_BIT        (1<<2)
 // supports addGeofences API
 #define   LOCATION_CAPABILITIES_GEOFENCE_BIT                      (1<<4)
 // supports GnssMeasurementsCallback
@@ -1200,6 +1202,8 @@ enum FixQualityLevel {
 struct LocationOptions {
     uint32_t size;          // set to sizeof(LocationOptions)
     uint32_t minInterval; // in milliseconds
+    uint32_t minDistance; // in meters. if minDistance > 0, gnssSvCallback/gnssNmeaCallback/
+                          // gnssMeasurementsCallback may not be called
     GnssSuplMode mode;    // Standalone/MS-Based/MS-Assisted
     // behavior when this field is 0:
     //  if engine hub is running, this will be fused fix,
@@ -1208,7 +1212,7 @@ struct LocationOptions {
     FixQualityLevel qualityLevelAccepted; /* Send through position reports with which accuracy. */
 
     inline LocationOptions() :
-            size(0), minInterval(0), mode(GNSS_SUPL_MODE_STANDALONE),
+            size(0), minInterval(0), minDistance(0), mode(GNSS_SUPL_MODE_STANDALONE),
             locReqEngTypeMask((LocReqEngineTypeMask)0),
             qualityLevelAccepted(QUALITY_HIGH_ACCU_FIX_ONLY) {}
 };
@@ -1309,6 +1313,7 @@ struct TrackingOptions : LocationOptions {
     inline void setLocationOptions(const LocationOptions& options) {
         size = sizeof(TrackingOptions);
         minInterval = options.minInterval;
+        minDistance = options.minDistance;
         mode = options.mode;
         locReqEngTypeMask = options.locReqEngTypeMask;
         qualityLevelAccepted = options.qualityLevelAccepted;
@@ -1316,6 +1321,7 @@ struct TrackingOptions : LocationOptions {
     inline LocationOptions getLocationOptions() {
         LocationOptions locOption;
         locOption.size = sizeof(locOption);
+        locOption.minDistance = minDistance;
         locOption.minInterval = minInterval;
         locOption.mode = mode;
         locOption.locReqEngTypeMask = locReqEngTypeMask;

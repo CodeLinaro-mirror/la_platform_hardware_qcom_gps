@@ -41,7 +41,6 @@
 #include <log_util.h>
 #include <LocIpc.h>
 #include <algorithm>
-#include <unordered_map>
 
 using namespace std;
 
@@ -51,6 +50,8 @@ namespace loc_util {
 #undef LOG_TAG
 #endif
 #define LOG_TAG "LocSvc_LocIpc"
+#define LOC_IPC_MAX_PAYLOAD_SIZE (5 * 1024 * 1024)  /* 5 MB sanity cap on reassembled payload */
+#define MAX_REASSEMBLY_ENTRIES 16
 
 #define SOCK_OP_AND_LOG(buf, length, opable, rtv, exe)  \
     if (nullptr == (buf) || 0 == (length)) { \
@@ -63,8 +64,6 @@ namespace loc_util {
             LOC_LOGw("failed reason: %s", strerror(errno)); \
         } \
     }
-
-std::unordered_map<std::string, std::pair<int32_t, std::string>> sSockToPayloadMap;
 
 const char Sock::MSG_ABORT[] = "LocIpc::Sock::ABORT";
 bool Sock::sRandSeeded = false;
@@ -125,8 +124,9 @@ ssize_t Sock::sendto(const void *buf, size_t len, int flags, const struct sockad
     }
     return rtv;
 }
-ssize_t Sock::recvfrom(const LocIpcRecver& recver, const shared_ptr<ILocIpcListener>& dataCb,
-                       int sid, int flags, struct sockaddr *srcAddr, socklen_t *addrlen) const  {
+
+  ssize_t Sock::recvfrom(const LocIpcRecver& recver, const shared_ptr<ILocIpcListener>& dataCb,
+                       int sid, int flags, struct sockaddr *srcAddr, socklen_t *addrlen) const {
     constexpr int MAX_RECV_RETRIES = 5;
     ssize_t nBytes = 0;
     std::string msg(mMaxTxSize + sizeof(LOC_IPC_HEAD), 0);
@@ -143,51 +143,82 @@ ssize_t Sock::recvfrom(const LocIpcRecver& recver, const shared_ptr<ILocIpcListe
         if (strncmp(msg.data(), MSG_ABORT, sizeof(MSG_ABORT)) == 0) {
             LOC_LOGi("recvd abort msg.data %s", msg.data());
             nBytes = -100;
-        } else if (nBytes <= sizeof(LOC_IPC_HEAD) || strncmp(msg.data(), LOC_IPC_HEAD, 16) ||
-                   msg.data()[32] != '$' || msg.data()[41] != '$') {
+        } else if (nBytes <= (ssize_t)sizeof(LOC_IPC_HEAD) ||
+                   strncmp(msg.data(), LOC_IPC_HEAD, 16) ||
+                   msg.data()[32] != '$' ||
+                   msg.data()[41] != '$') {
+            // short message — invoke directly, no map involved
             msg.resize(nBytes);
             dataCb->onReceive(msg.data(), nBytes, &recver);
         } else {
+            // long/multi-part message
             std::string key(msg.data(), sizeof(LOC_IPC_HEAD));
-            auto iter = sSockToPayloadMap.find(key);
             size_t payLoadSize = nBytes - sizeof(LOC_IPC_HEAD);
-            if (iter == sSockToPayloadMap.end()) {
-                size_t totalSize = 0;
-                sscanf(msg.data() + sizeof(LOC_IPC_HEAD) - 9, "%zx", &totalSize);
-                if (totalSize < payLoadSize) {
-                    LOC_LOGe("Corrupt message: payload size %zu exceeds total %zu",
-                            payLoadSize, totalSize);
-                    return -1;
+            auto iter = mSockToPayloadMap.find(key);
+            if (iter == mSockToPayloadMap.end()) {
+                // At the start of recvfrom, or when inserting a new entry,
+                // enforce a maximum number of in-flight reassembly entries:
+                if (mSockToPayloadMap.size() >= MAX_REASSEMBLY_ENTRIES) {
+                    LOC_LOGe("recvfrom: reassembly map full (%zu entries), dropping oldest",
+                            mSockToPayloadMap.size());
+                    mSockToPayloadMap.erase(mSockToPayloadMap.begin());
                 }
-                sSockToPayloadMap[key] = std::make_pair(totalSize - payLoadSize,
-                                                        string(totalSize, 0));
-                memcpy((char*)sSockToPayloadMap[key].second.data(),
-                       msg.data() + sizeof(LOC_IPC_HEAD), payLoadSize);
-            } else {
-                 if (payLoadSize > iter->second.first) {
-                    LOC_LOGe("Fragment overflow for key %s", key.c_str());
-                    sSockToPayloadMap.erase(iter);
-                    return -1;
-                }
-                memcpy((char*)iter->second.second.data() +
-                       (iter->second.second.size() - iter->second.first),
-                       msg.data() + sizeof(LOC_IPC_HEAD), payLoadSize);
-                iter->second.first -= payLoadSize;
+                // First fragment — parse and validate totalSize from header
 
-                if (iter->second.first == 0) {
-                    dataCb->onReceive(iter->second.second.data(),
-                                      iter->second.second.size(), &recver);
-                    sSockToPayloadMap.erase(iter);
+                // validate sscanf return, totalSize > 0 and within
+                // sane upper bound to prevent OOM / zero-byte allocation
+                // and subsequent out-of-bounds memcpy on crafted packets.
+                size_t totalSize = 0;
+                if (sscanf(msg.data() + sizeof(LOC_IPC_HEAD) - 9, "%zx", &totalSize) != 1 ||
+                        totalSize == 0 || payLoadSize > totalSize ||
+                        totalSize > (size_t)LOC_IPC_MAX_PAYLOAD_SIZE) {
+                    LOC_LOGe("recvfrom: invalid totalSize parsed from header"
+                             " (totalSize=%zu), (payLoadSize =%zu) dropping fragment",
+                             totalSize, payLoadSize);
+                } else {
+                    auto& entry = mSockToPayloadMap[key]; // single insert
+                    entry.first  = (int32_t)(totalSize - payLoadSize);
+                    entry.second.assign(totalSize, 0);
+
+                    memcpy(const_cast<char*>(entry.second.data()),
+                           msg.data() + sizeof(LOC_IPC_HEAD), payLoadSize);
+                }
+            } else {
+                // Continuation fragment
+                auto& entry = iter->second;
+                // If entry.first is already <= 0, this entry is corrupt/over-delivered; discard.
+                if (entry.first <= 0) {
+                    LOC_LOGe("recvfrom: stale/corrupt entry, discarding");
+                    mSockToPayloadMap.erase(iter);
+                } else {
+                    size_t writeOffset = entry.second.size() - (size_t)entry.first;
+                    size_t remaining = entry.second.size() - writeOffset;
+
+                    memcpy(const_cast<char*>(entry.second.data()) + writeOffset,
+                            msg.data() + sizeof(LOC_IPC_HEAD), payLoadSize);
+                    entry.first -= (int32_t)payLoadSize;
+
+                    if (entry.first < 0) {
+                        LOC_LOGe("recvfrom: received more bytes than declared"
+                        " in header (over by %d bytes), discarding", -(entry.first));
+                        mSockToPayloadMap.erase(iter);
+                    } else if (entry.first == 0) {
+                        dataCb->onReceive(entry.second.data(), entry.second.size(), &recver);
+                        mSockToPayloadMap.erase(iter);
+                    }
+
                 }
             }
         }
     } else if (nBytes == -1) {
         LOC_LOGe("recvfrom failed after retries, errno %d - %s", errno, strerror(errno));
-        sSockToPayloadMap.clear();
+        // Clears only THIS socket's map — other sockets are unaffected
+        mSockToPayloadMap.clear();
     }
 
     return nBytes;
 }
+
 ssize_t Sock::sendAbort(int flags, const struct sockaddr *destAddr, socklen_t addrlen) {
     return send(MSG_ABORT, sizeof(MSG_ABORT), flags, destAddr, addrlen);
 }

@@ -697,28 +697,6 @@ LocationAPI::gnssNiResponse(uint32_t id, GnssNiResponse response)
     pthread_mutex_unlock(&gDataMutex);
 }
 
-void LocationAPI::enableNetworkProvider() {
-    void* libHandle = nullptr;
-    enableProviderGetter* setter = (enableProviderGetter*)dlGetSymFromLib(libHandle,
-            "liblocationservice_glue.so", "enableNetworkProvider");
-    if (setter != nullptr) {
-        (*setter)();
-    } else {
-        LOC_LOGe("dlGetSymFromLib failed for liblocationservice_glue.so");
-    }
-}
-
-void LocationAPI::disableNetworkProvider() {
-    void* libHandle = nullptr;
-    disableProviderGetter* setter = (disableProviderGetter*)dlGetSymFromLib(libHandle,
-            "liblocationservice_glue.so", "disableNetworkProvider");
-    if (setter != nullptr) {
-        (*setter)();
-    } else {
-        LOC_LOGe("dlGetSymFromLib failed for liblocationservice_glue.so");
-    }
-}
-
 void LocationAPI::startNetworkLocation(trackingCallback* callback, TerrestrialTechMask techMask) {
     void* libHandle = nullptr;
     getSingleNetworkLocationGetter* setter =

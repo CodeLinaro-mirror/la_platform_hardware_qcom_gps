@@ -259,6 +259,7 @@ void GnssAPIClient::initLocationOptions() {
     // set default LocationOptions.
     mTrackingOptions.size = sizeof(TrackingOptions);
     mTrackingOptions.minInterval = 1000;
+    mTrackingOptions.minDistance = 0;
     mTrackingOptions.mode = GNSS_SUPL_MODE_STANDALONE;
 }
 
@@ -477,7 +478,8 @@ void GnssAPIClient::updateCapabilities(LocationCapabilitiesMask capabilitiesMask
 
     uint32_t data = 0;
     if ((capabilitiesMask & LOCATION_CAPABILITIES_TIME_BASED_TRACKING_BIT) ||
-            (capabilitiesMask & LOCATION_CAPABILITIES_TIME_BASED_BATCHING_BIT)) {
+            (capabilitiesMask & LOCATION_CAPABILITIES_TIME_BASED_BATCHING_BIT) ||
+            (capabilitiesMask & LOCATION_CAPABILITIES_DISTANCE_BASED_TRACKING_BIT)) {
         data |= IGnssCallback::CAPABILITY_SCHEDULING;
     }
     if (capabilitiesMask & LOCATION_CAPABILITIES_GEOFENCE_BIT) {
