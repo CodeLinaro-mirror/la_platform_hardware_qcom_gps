@@ -9,6 +9,13 @@ service loc_launcher /vendor/bin/loc_launcher
     group gps
     disabled
 
+service xtra-daemon /vendor/bin/xtra-daemon
+    override
+    class late_start
+    user gps
+    group inet diag gps system radio logd
+    disabled
+
 service gnss_service /vendor/bin/hw/android.hardware.gnss-aidl-service-qti-stub
     override
     interface aidl android.hardware.gnss.IGnss/default
