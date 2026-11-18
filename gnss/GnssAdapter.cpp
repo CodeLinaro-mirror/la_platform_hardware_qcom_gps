@@ -4526,6 +4526,12 @@ GnssAdapter::reportPositionEvent(const UlpLocation& ulpLocation,
                             mLocationExtended.vert_unc = vertUnc;
                         }
 
+                        // Consider ZPP fix from modem as SPE fix
+                        mLocationExtended.flags |= GPS_LOCATION_EXTENDED_HAS_OUTPUT_ENG_TYPE;
+                        mLocationExtended.locOutputEngType = LOC_OUTPUT_ENGINE_SPE;
+                        mLocationExtended.flags |= GPS_LOCATION_EXTENDED_HAS_OUTPUT_ENG_MASK;
+                        mLocationExtended.locOutputEngMask = STANDARD_POSITIONING_ENGINE;
+
                         LOC_LOGd("zpp loc flags: %u, latitude: %f, longitude: %f, hor acc: %f,"
                                  "altitude: %f, extended loc flags: %" PRIu64 ", vertUnc: %f,"
                                  "techMask: %u, timestamp: %" PRId64,

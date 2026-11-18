@@ -27,10 +27,11 @@
  */
 
 /*
- * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
+
 #ifndef LOCATIONAPI_H
 #define LOCATIONAPI_H
 
@@ -203,13 +204,6 @@ public:
     virtual void gnssNiResponse(uint32_t id, GnssNiResponse response) override;
 
     /* ================================== NETWORK PROVIDER =========================== */
-
-    /* enableNetworkProvider enables Network Provider */
-    virtual void enableNetworkProvider();
-
-    /* disableNetworkProvider disables Network Provider */
-    virtual void disableNetworkProvider();
-
     /* startNetworkLocation starts tracking session for
        network location request */
     virtual void startNetworkLocation(trackingCallback* callback);
